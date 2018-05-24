@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::hash::{Hasher, Hash, BuildHasherDefault};
 use std::ops::BitXor;
+use std::mem::size_of;
 
 pub type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 pub type FxHashSet<V> = HashSet<V, BuildHasherDefault<FxHasher>>;
@@ -62,10 +63,24 @@ impl FxHasher {
 
 impl Hasher for FxHasher {
     #[inline]
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            let i = *byte;
-            self.add_to_hash(i as usize);
+    fn write(&mut self, mut bytes: &[u8]) {
+        unsafe {
+            assert!(size_of::<usize>() <= 8);
+            while bytes.len() >= size_of::<usize>() {
+                self.add_to_hash(*(bytes.as_ptr() as *const usize));
+                bytes = &bytes[size_of::<usize>()..];
+            }
+            if (size_of::<usize>() > 4) && (bytes.len() >= 4) {
+                self.add_to_hash(*(bytes.as_ptr() as *const u32) as usize);
+                bytes = &bytes[4..];
+            }
+            if (size_of::<usize>() > 2) && bytes.len() >= 2 {
+                self.add_to_hash(*(bytes.as_ptr() as *const u16) as usize);
+                bytes = &bytes[2..];
+            }
+            if (size_of::<usize>() > 1) && bytes.len() >= 1 {
+                self.add_to_hash(bytes[0] as usize);
+            }
         }
     }
 
